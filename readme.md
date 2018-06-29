@@ -41,7 +41,31 @@ No, this scenario is recommended when:
 - There's no much need on detecting entities in a sentence using LUIS or other NLP services
 
 ## Preparing the scenario
+> TIP. It is suggested to create a specific resource group for this example / test if you are using an Azure account from your company or simply you don't want to mess with other services created by colleagues in your organization.
+
 ### Creating the QnA maker service
+A basic QnA Maker service must be created at the Azure Portal:
+![Creating a QnA Service at the Portal](images/qna1.PNG)
+
+For testing purposes, the free tiers of Management and Search at QnA Maker will be more than enough:
+
+![Choosing free tears at the QnA Service](images/qna2.PNG)
+
+Once the service is listed, a new knowledge base must be created at the [QnA Maker portal](https://www.qnamaker.ai/Home/MyServices):
+![Creating a Knowledge Base](images/qna3.PNG)
+
+After filling the information from the QnA Service created a name and knowledge base source is needed. For this sample, the [Azure Support FAQ](https://azure.microsoft.com/en-us/support/faq/) is used:
+
+![Using the Azure Support FAQ](images/qna4.PNG)
+
+After the questions have been loaded, it is needed to save and train the service using the button at the upper right side of the page and then publish th service also using the button at the top menu:
+
+![Saving, training and publishing the service](images/qna5.PNG)
+
+Once the service is deployed, the **endpoint**, **authorization key** and **knowledge base ID** should be stored to later use them in the bot:
+
+![Saving the credentials from the bot](images/qna6.PNG)
+
 ### Creating the LUIS service
 ### Creating the Azure Bot service 
 ### Creating the Cosmos DB service 
