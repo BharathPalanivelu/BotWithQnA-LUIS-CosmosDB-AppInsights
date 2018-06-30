@@ -67,6 +67,47 @@ Once the service is deployed, the **endpoint**, **authorization key** and **know
 ![Saving the credentials from the bot](images/qna6.PNG)
 
 ### Creating the LUIS service
+A basic QnA Maker service must be created at the Azure Portal:
+
+![LUIS Service at the Azure portal](images/luis1.PNG)
+
+As with the QnA Maker, for testing purposes the free tier available of the LUIS service is used in this example:
+
+![LUIS Service free tier at Azure portal](images/luis2.PNG)
+
+Once the LUIS service is ready, it is time to go to the [LUIS portal](https://www.luis.ai/home) and create a new App:
+
+![Creating a new LUIS App in the portal](images/luis3.PNG)
+
+As mentioned before, the use of LUIS in this scenario is not so typical. The intents created are made of 3-4 words that will be sent again to QnA in the hopes that QnA returns an answer. As an example: The Intent **SubmitSupportRequest** will have utterances related to different ways of asking how to get or what it is the process of **Submitting a support request**.
+
+#### Why? ####
+Suppose the user asked:
+> *"What are the steps to submit a support request in the Azure portal?"* 
+
+and at firts the QnA service couldn't match this question to the question:
+> *How do I submit a support request*
+
+Then the original question will be sent to LUIS that will indeed identify that this is related to a *SubmitSupportRequest* intent. We'll extract the words *Submit, Support and Request* from the entity name and send this 3 words as a new question to QnA, the latter will now identify what the user meant to and will provide an answer. 
+
+#### Training different LUIS intents ####
+It is not necessary to map ALL of the QnA questions to a LUIS intent. Sometimes, questions like:
+> *How do I submit a support request?*
+
+are really straightforward. In this example it is recommended to create LUIS intents for tricky or hard questions in our knowledge base like:
+
+> *How do I get support during an outage or service interruption event?*
+
+> *Which support plan do I need in order to request a Root-Cause Analysis (RCA)*
+
+After enough examples of intents and utterances, the LUIS service should be traing and published:
+
+![Publishing and training of the LUIS app](images/luis4.PNG)
+
+Once the publishing is completed, an App ID and a Subscription Key will be available at the end of the Publish page:
+
+![Getting the App ID and Subscription Key from the LUIS App](images/luis5.PNG) 
+
 ### Creating the Azure Bot service 
 ### Creating the Cosmos DB service 
 
