@@ -108,8 +108,35 @@ Once the publishing is completed, an App ID and a Subscription Key will be avail
 
 ![Getting the App ID and Subscription Key from the LUIS App](images/luis5.PNG) 
 
-### Creating the Azure Bot service 
+### Creating the Azure Bot service
+A **Web App Bot** service needs to be created at the Azure portal:
+
+![Creating the Bot Service at Azure](images/bot1.PNG)
+
+No custom settings are needed for the creation of the bot, and for this sample, the Free tier is more than enough:
+
+![Creating the Bot Service at Azure](images/bot2.PNG)
+
+Once the service is created, the *Bot App ID* and its *Password* can be retrieved at the **Application Settings** section:
+
+![Getting the App Settings at the portal](images/bot3.PNG)
+
 ### Creating the Cosmos DB service 
+One of the last services needed in Azure is a Cosmos DB Service:
+
+![Creating the Cosmos DB service](images/cosmos1.PNG)
+
+No custom settings are required for the demo, just selecting the SQL API for the database:
+
+![Creating the Cosmos DB service](images/cosmos2.PNG)
+
+A database and a collection also need to be created:
+
+![Creating a database and a collection](images/cosmos3.PNG)
+
+One last thing before start coding! The credentials of the Cosmos DB service will be needed. They can be found at the **Keys** section in the **Settings** menu of the service:
+
+![Saving the Cosmos DB credentials](images/cosmos4.PNG)
 
 ## Coding time ##
 ### Creating the dialog flow
