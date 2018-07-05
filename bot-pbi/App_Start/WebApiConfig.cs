@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web.Http;
 
-namespace BotWithQnA_LUIS_CosmosDB_AppInsights
+namespace bot_pbi
 {
     public static class WebApiConfig
     {

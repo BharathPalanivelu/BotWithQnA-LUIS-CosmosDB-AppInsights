@@ -139,7 +139,67 @@ One last thing before start coding! The credentials of the Cosmos DB service wil
 ![Saving the Cosmos DB credentials](images/cosmos4.PNG)
 
 ## Coding time ##
+>TIP. The Bot Builder template for Visual Studio is used in this sample. You can [download it here](https://marketplace.visualstudio.com/items?itemName=BotBuilder.BotBuilderV3).
+
+If the Bot builder template is installed correctly this app type should appear at Visual Studio:
+
+![Bot template de Visual Studio](images/code1.PNG) 
+
+Altough this example is based around the use of the template, its use is not mandatory, the template merely helps with the creation of folders and the bot code structure:
+
+![Bot code structure by the template](images/code2.PNG)
+
+>TIP: Update the Bot framework via Nuget Package manager to use the latest version
+
+### Messages Controller
+The code in the **Messages Controller** class is almost boilerplate code with the extra that it displays a welcome message to the user:
+
+```csharp
+public async Task<HttpResponseMessage> Post([FromBody]Activity activity)
+{
+    switch (activity.Type)
+    {
+        case ActivityTypes.Message:
+            await Conversation.SendAsync(activity, () => new Dialogs.RootDialog());
+            break;
+        case ActivityTypes.ConversationUpdate:
+            if (activity.MembersAdded.Any(o => o.Id == activity.Recipient.Id))
+                await BotUtilities.DisplayWelcomeMessage(activity, "Bienvenido a nuestro Bot icbf!");
+            break;
+        default:
+            break;
+    }
+    var response = Request.CreateResponse(HttpStatusCode.OK);
+    return response;
+}
+```
+
 ### Creating the dialog flow
+As stated in the architecture diagram, the dialog should go:
+- User asks a question
+- Question goes to QnA
+- If QnA has an answer:
+    - Return the answer
+- If QnA does not have an answer:
+    - Send the question to LUIS
+        - If LUIS has an answer:
+            - Return the answer
+        - If LUIS does not have an answer:
+            - Return a "could not understand the question" message
+
+Converting this conversation flow to Bot Dialog generally gets us 3 dialogs:
+- A root dialog that starts the conversation
+- A QnA Dialog that connects to the QnA Service
+- A LUIS Dialog that connects to LUIS service
+
+In fact, the sample uses only two dialogs:
+- A root dialog
+- A QnA dialog
+
+This is because the LUIS service is called in the  *after* method of the QnA dialog as it is seen in the source code.
+
+#### Root dialog ####
+
 ### Custom Events in App Insights
 ### Writing to Cosmos DB
 
