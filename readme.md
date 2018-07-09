@@ -198,18 +198,296 @@ In fact, the sample uses only two dialogs:
 
 This is because the LUIS service is called in the  *after* method of the QnA dialog as it is seen in the source code.
 
-#### Root dialog ####
+#### Root dialog
+The Root Dialog has 4 different methods:
+- StartAsync
+- MessageReceivedAsync
+- AfterQnADialog
+- GetLuisAnswer
 
-### Custom Events in App Insights
-### Writing to Cosmos DB
+**StartAsync** just receives the message from the user and waits for an answer that is processed in the **MessageReceivedAsync** method:
+```csharp
+public Task StartAsync(IDialogContext context)
+{
+    context.Wait(MessageReceivedAsync);
+
+    return Task.CompletedTask;
+}
+```
+
+**MessageReceivedAsync** method receives the question from the user and starts a new **QnaDialog** instance, once the instance is solved, it calls the **AfterQnADialog** method:
+```csharp
+private async Task MessageReceivedAsync(IDialogContext context, IAwaitable<object> result)
+{
+    var activity = await result as Activity;
+
+    QnADialog dialog = new QnADialog();
+    
+    dialog.originalQuestion = activity.Text;
+    await context.Forward(dialog, AfterQnADialog, activity, CancellationToken.None);
+}        
+```
+
+The **AfterQnADialog** method answers the user in three different ways:
+- If QnA service retrieved an answer then said answer is shown to the user
+- If there was no result from QnA then LUIS service is called in the  **GetLuisAnswer** method, and the entity returned from LUIS is passed AGAIN to a QnA Dialog (in this case, the method **AfterQnADialog** will be called again)
+- If on the second call there's no answer from QnA even after sending the LUIS entity as a question to QnA then the bot will reply with a "I couldn't understand you" message:
+```csharp
+private async Task AfterQnADialog(IDialogContext context, IAwaitable<object> result)
+{
+    var message = context.Activity as IMessageActivity;
+    string typeResultInQnA = (await result as Activity).Text;
+
+    switch (typeResultInQnA)
+    {
+        case SharedObjects.ResultFromQnA.NO_RESULT_FROM_QNA:
+            QnADialog dialog = new QnADialog();
+            dialog.isComingFromLuis = true;
+
+
+            string LuisAnswer = GetLuisAnswer(message.Text, out double score);
+
+            if (LuisAnswer == "None")
+            {
+                await context.PostAsync(SharedObjects.NO_RESULT_ANSWER);
+
+                AppInsightsTelemetryClient.TrackEvent(message.Id);
+                AppInsightsTelemetryClient.InsertTransaction(message, message.Text, 0, score, SharedObjects.NO_RESULT_ANSWER_IN_DB, LuisAnswer, AnswerType.noAnswer);
+            }
+            else
+            {
+                dialog.originalQuestion = message.Text;
+                message.Text = LuisAnswer;
+                await context.Forward(dialog, AfterQnADialog, message);
+            
+            }
+            break;
+
+        case SharedObjects.ResultFromQnA.NO_RESULT_FROM_QNA_AND_LUIS:
+            await context.PostAsync(SharedObjects.NO_RESULT_ANSWER);
+            break;
+
+        default:
+            context.Done(this);
+            break;
+    }
+}
+```
+
+The **GetLuisAnswer** method simply calls the LUIS service and tries to retrieve an intent that then will be sent to the QnA service as a question:
+```csharp
+private string GetLuisAnswer(string text, out double score)
+{
+    string LUIS_APP_ID = ConfigurationManager.AppSettings["LuisApplicationId"];
+    string LUIS_KEY = ConfigurationManager.AppSettings["LuisSubscriptionKey"];
+    LuisClient luisClient = new LuisClient(LUIS_APP_ID, LUIS_KEY);
+    var resultLuis = luisClient.Predict(text).Result;
+    var luisOriginalIntent = resultLuis.TopScoringIntent.Name;
+    score = resultLuis.TopScoringIntent.Score;
+    return luisOriginalIntent.Replace('-', ' ');
+}
+```
+
+#### QnA Dialog
+Since the QnA Dialog class is used two times depending on if the first time the service was not able to retrieve an answer, it has some attributes that come handy such as a boolean to define if the specific instance was called using LUIS or not:
+
+```csharp
+public class QnADialog : QnAMakerDialog
+{
+    private static string typeResultInQnA;
+    private double QnAMakerScoreThresHold;
+    public string originalQuestion { get; set; }
+    public bool isComingFromLuis { get; set; }
+
+    public QnADialog() : base(
+        new QnAMakerService(
+            new QnAMakerAttribute(
+                ConfigurationManager.AppSettings["QnAMakerAuthKey"],
+                ConfigurationManager.AppSettings["QnAMakerKnowledgeBaseID"],
+                "No se encontró resultado",
+                0,
+                Convert.ToInt32(ConfigurationManager.AppSettings["QnAMakerTop"]),
+                ConfigurationManager.AppSettings["QnAMakerEndPointHostName"])))
+    {
+        QnAMakerScoreThresHold = Convert.ToDouble(ConfigurationManager.AppSettings["QnAMakerScoreThresHold"], new CultureInfo("en-us"));
+        isComingFromLuis = false;
+    }
+    /// More code here
+}
+```
+###### The bug with QnA always returning "No good match found in KB"
+Currently, there's a bug in the **QnAMakerDialog** class that makes the bot send the user a "No good match found in KB" message if the service couldn't find an answer, this happens even if the QnADialog constructor was overwritten. And since the example handles the *No answer* scenario outside of the QnA Dialog a simple workaround to stop the Bot to answer with the **"No good ma.."** message is to override the **IsConfidentAnswer** method to *ALWAYS* return true: 
+```csharp
+protected override bool IsConfidentAnswer(QnAMakerResults qnaMakerResults)
+{
+    return true;
+}
+```
+
+This will force the bot to then enter to the **RespondFromQnAMakerResultAsync** that resolves if the service has an answer or not for the user:
+```csharp
+protected override async Task RespondFromQnAMakerResultAsync(IDialogContext context, IMessageActivity message, QnAMakerResults result)
+{
+    var answers = GetAnswerData(result);
+    var counter = answers.Count();
+
+    if (counter == 0)
+    {
+        if (isComingFromLuis)
+        {
+            AppInsightsTelemetryClient.TrackEvent(message.Id);
+            AppInsightsTelemetryClient.InsertTransaction(context.Activity as IMessageActivity,
+                originalQuestion, 0, 0, SharedObjects.NO_RESULT_ANSWER_IN_DB, (context.Activity as IMessageActivity).Text,
+            AnswerType.noAnswer);
+            typeResultInQnA = SharedObjects.ResultFromQnA.NO_RESULT_FROM_QNA_AND_LUIS;
+        }
+
+        else
+            typeResultInQnA = SharedObjects.ResultFromQnA.NO_RESULT_FROM_QNA;
+    }
+    else
+    {
+        typeResultInQnA = SharedObjects.ResultFromQnA.RESULT_FROM_QNA;
+
+        AppInsightsTelemetryClient.TrackEvent(message.Id);
+        AppInsightsTelemetryClient.InsertTransaction(context.Activity as IMessageActivity,
+                        originalQuestion, counter, answers[0].Score, answers[0].Questions[0],
+                        (isComingFromLuis ? message.Text : "None"),
+                        (isComingFromLuis ? AnswerType.QnALuis : AnswerType.QnA));
+
+        var carrusel = context.MakeMessage();
+        carrusel.AttachmentLayout = AttachmentLayoutTypes.Carousel;
+        var options = new List<Attachment>();
+
+        if (counter == 1)
+            await context.PostAsync($"I found 1 answer:");
+        else
+            await context.PostAsync($"Are any of these {counter} answers helpful?");
+
+        foreach (var qnaMakerResult in answers)
+            options.Add(CreateCard(qnaMakerResult));
+
+        carrusel.Attachments = options;
+
+        await context.PostAsync(carrusel);
+    }
+}
+```
+
+### Custom Events in App Insights and Writing to Cosmos DB
+The sample uses a class called **AppInsightsTelemetryClient** that contains two methods:
+- **TrackEvent** to write to Application Insights. This is simply done thanks to the SDK from Application Insights. The SDK has a **TelemetryClient** class that counts with a **TrackEvent** method. This **TrackEvent** method grabs a custom event name and optionally receives a dictionary of custom attributes that App Insights will store. For more information take a look at [Custom Events documentation inside Application insights](https://docs.microsoft.com/en-us/azure/application-insights/app-insights-api-custom-events-metrics).
+
+- **InsertTransaction** to write to CosmosDB
+```csharp
+public static class AppInsightsTelemetryClient
+{
+    static TelemetryClient _instance;
+    public static TelemetryClient GetInstance()
+    {
+        if (_instance == null)
+            _instance = new TelemetryClient();
+        return _instance;
+    }
+
+    public static void TrackEvent(string custonNameEvent)
+    {
+        _instance.TrackEvent(custonNameEvent);
+    }
+
+    public static void InsertTransaction( IMessageActivity activity, 
+        string originalQuestion, int counter,
+        double maxScore, string maxScoreQuestion,
+        string LuisIntent, AnswerType answerType)
+    {
+        var persistency = SharedObjects.DatabaseManager;
+
+        BotTracking tracking = new BotTracking
+        {
+            IdActivity = activity.Id,
+            IdConversation = activity.Conversation.Id,
+            EntryQuestion = originalQuestion,
+            NumAnswer = counter,
+            AnswerType = answerType,
+            MaxScore = maxScore,
+            LuisIntent = LuisIntent,
+            MaxScoredQuestion = maxScoreQuestion
+        };
+        var transactionResult = persistency.AddData(tracking);
+
+        if (!transactionResult.Success)
+        {
+            if (transactionResult.Ex != null)
+                Trace.TraceWarning($"{transactionResult.Message}: {transactionResult.Ex.Message} ");
+            else
+                Trace.TraceWarning(transactionResult.Message);
+        }
+    }
+}
+```
+Behind the simplicity of the **InsertTransaction** method lies a more robust and complex database handler in form of an interface called **IDBManager** that has an **AddData** method. The specific implementation for a Cosmos database lies in the **DocumentDBManager** class:
+```csharp
+public DBTransactionResult AddData(object info)
+{
+    var result = new DBTransactionResult();
+    string typename = info.GetType().Name;
+
+    try
+    {
+        switch (typename)
+        {
+            case nameof(BotTracking):
+                var rr = _docuClient.CreateDocumentAsync(
+                    UriFactory.CreateDocumentCollectionUri(_dbName, _collectionID), info
+                    ).Result;
+                break;
+            default:
+                result.Success = false;
+                result.Message = "Tipo de información no esperado al insertar en la base de datos";
+                break;
+        }
+    }
+    catch (DocumentClientException ex)
+    {
+        result.SetException(ex);
+    }
+    return result;
+
+}
+```
+#### Handling of CosmosDB and/or other databases
+Look at the DAL folder in the source code to better understand the future handling of different database providers. Basically,the DatabaseProvider is defined in the **web.config** file:
+```xml
+<add key="DBType" value="DocumentDB"/>
+```
+And the value is readed in the **Global.asax.cs**'s **Aplication_Start** method:
+```csharp
+protected void Application_Start()
+{
+    GlobalConfiguration.Configure(WebApiConfig.Register);
+
+    AppInsightsTelemetryClient.GetInstance();
+
+    try
+    {
+        // Some code here...
+
+        if (Enum.TryParse<DAL.DBType>(ConfigurationManager.AppSettings["DBType"], out DAL.DBType dbt))
+        {
+            SharedObjects.DatabaseManager = DBManagerFactory.GetInstance(dbt, parameters);
+        }
+        else
+        {
+            // Some code here
+        }
+    }
+    catch (Exception ex)
+    {
+        // Some code here
+    }
+}
+```
 
 ## Reporting time
 ### Cosmos DB
 ### Application Insights
-#### Continuous export
-#### Saving formated blobs
-### Integration
-
-## Conclusion 
-
-## References

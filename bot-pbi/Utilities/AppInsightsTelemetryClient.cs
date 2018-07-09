@@ -1,11 +1,7 @@
 ﻿using bot_pbi.Model;
 using Microsoft.ApplicationInsights;
 using Microsoft.Bot.Connector;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Web;
 
 namespace bot_pbi.Utilities
 {
@@ -24,17 +20,11 @@ namespace bot_pbi.Utilities
             _instance.TrackEvent(custonNameEvent);
         }
 
-        public static void InsertTransaction(
-                    IMessageActivity activity,
-                    string originalQuestion,
-                    int counter,
-                    double maxScore,
-                    string maxScoreQuestion,
-                    string LuisIntent,
-                    AnswerType answerType)
+        public static void InsertTransaction( IMessageActivity activity, 
+            string originalQuestion, int counter,
+            double maxScore, string maxScoreQuestion,
+            string LuisIntent, AnswerType answerType)
         {
-
-
             var persistency = SharedObjects.DatabaseManager;
 
             BotTracking tracking = new BotTracking
@@ -56,7 +46,6 @@ namespace bot_pbi.Utilities
                     Trace.TraceWarning($"{transactionResult.Message}: {transactionResult.Ex.Message} ");
                 else
                     Trace.TraceWarning(transactionResult.Message);
-
             }
         }
     }
